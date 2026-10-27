@@ -1,122 +1,166 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { translations } from './i18n';
-import { presets } from './presets';
+import { presets, presetToState } from './presets';
+import {
+  CORE_BLOCKS,
+  GROUPS,
+  EMPTY_VALUES,
+  EMPTY_ENABLED,
+  loc,
+  migrateLegacy
+} from './sections';
 import './index.css';
 
-const EMPTY_FORM = {
-  title: '',
-  concept: '',
-  genrePlatform: '',
-  coreLoop: '',
-  lore: '',
-  coop: '',
-  risk: '',
-  ui: '',
-  assets: '',
-  monetization: '',
-  techSpecs: '',
-  marketing: '',
-  milestones: ''
-};
+const STORAGE_KEY = 'opengdd-draft-v3';
+const LEGACY_STORAGE_KEY = 'opengdd-draft-v2';
+const PREVIEW_SKIP = new Set(['title', 'mantra', 'pillars']);
+const CATEGORIES = ['action', 'narrative', 'strategy', 'puzzle', 'mobile', 'jam'];
 
-const EMPTY_MODULES = {
-  lore: false,
-  coop: false,
-  risk: false,
-  ui: false,
-  assets: false,
-  monetization: false,
-  techSpecs: false,
-  marketing: false,
-  milestones: false
-};
+// textarea that grows with its text
+function AutoText({ value, rows = 2, ...rest }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return <textarea ref={ref} rows={rows} value={value} {...rest} />;
+}
 
-const MODULE_KEYS = Object.keys(EMPTY_MODULES);
-const STORAGE_KEY = 'opengdd-draft-v2';
+// "Name (note)" -> { name, note }
+function splitTitle(title) {
+  const m = title.match(/^(.*?)\s*\((.*)\)\s*$/);
+  return m ? { name: m[1], note: m[2] } : { name: title, note: '' };
+}
 
 export default function App() {
   const [lang, setLang] = useState('tr');
   const t = translations[lang];
 
-  const [formData, setFormData] = useState(EMPTY_FORM);
-  const [activeModules, setActiveModules] = useState(EMPTY_MODULES);
+  const [values, setValues] = useState(EMPTY_VALUES);
+  const [enabled, setEnabled] = useState(EMPTY_ENABLED);
+  const [custom, setCustom] = useState([]);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showExport, setShowExport] = useState(false);
-  const [autosavedPulse, setAutosavedPulse] = useState(false);
+  const [tplMode, setTplMode] = useState('example');
+  const [savedPulse, setSavedPulse] = useState(false);
   const fileInputRef = useRef(null);
   const firstRender = useRef(true);
 
-  // Restore the last draft when the page loads
+  // load the saved draft, or migrate a v2 one
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.formData) setFormData({ ...EMPTY_FORM, ...parsed.formData });
-        if (parsed.activeModules) setActiveModules({ ...EMPTY_MODULES, ...parsed.activeModules });
-        if (parsed.lang) setLang(parsed.lang);
+        const p = JSON.parse(raw);
+        if (p.values) setValues({ ...EMPTY_VALUES, ...p.values });
+        if (p.enabled) setEnabled({ ...EMPTY_ENABLED, ...p.enabled });
+        if (Array.isArray(p.custom)) setCustom(p.custom);
+        if (p.lang) setLang(p.lang);
+        return;
+      }
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy) {
+        const p = JSON.parse(legacy);
+        const m = migrateLegacy(p.formData, p.activeModules);
+        setValues(m.values);
+        setEnabled(m.enabled);
+        if (p.lang) setLang(p.lang);
       }
     } catch (e) {
-      // Invalid draft; ignore it silently
+      // bad draft, start empty
     }
   }, []);
 
-  // Auto-save with debounce
+  // Bungee is caps only, lang decides i vs İ
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  // autosave
   useEffect(() => {
     if (firstRender.current) {
       firstRender.current = false;
       return;
     }
+    let pulseTimer;
     const handle = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ formData, activeModules, lang }));
-        setAutosavedPulse(true);
-        setTimeout(() => setAutosavedPulse(false), 1500);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ values, enabled, custom, lang }));
+        setSavedPulse(true);
+        pulseTimer = setTimeout(() => setSavedPulse(false), 1500);
       } catch (e) {
-        // Storage is full or unavailable; ignore it silently
+        // storage full, skip
       }
     }, 600);
-    return () => clearTimeout(handle);
-  }, [formData, activeModules, lang]);
+    return () => {
+      clearTimeout(handle);
+      clearTimeout(pulseTimer);
+    };
+  }, [values, enabled, custom, lang]);
 
-  const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const setValue = (id, v) => setValues((prev) => ({ ...prev, [id]: v }));
+  const toggleGroup = (id) => setEnabled((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const addCustom = () => setCustom((prev) => [...prev, { id: `c${Date.now()}`, title: '', body: '' }]);
+  const updateCustom = (id, patch) =>
+    setCustom((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  const removeCustom = (id) => setCustom((prev) => prev.filter((c) => c.id !== id));
+
+  const hasContent =
+    Object.values(values).some((v) => v.trim()) || custom.some((c) => c.title.trim() || c.body.trim());
+
+  const handleNew = () => {
+    if (hasContent && !window.confirm(t.confirmNew)) return;
+    setValues(EMPTY_VALUES);
+    setEnabled(EMPTY_ENABLED);
+    setCustom([]);
   };
 
-  const toggleModule = (mod) => {
-    setActiveModules({ ...activeModules, [mod]: !activeModules[mod] });
-  };
-
-  const toggleLang = () => setLang(lang === 'tr' ? 'en' : 'tr');
-
-  const loadPreset = (presetKey) => {
-    if (formData.title || formData.concept) {
-      if (!window.confirm(t.confirmLoadPreset)) return;
-    }
-    const p = presets[presetKey];
-    const next = { ...EMPTY_FORM };
-    Object.keys(EMPTY_FORM).forEach((field) => {
-      if (field === 'title' || field === 'genrePlatform') {
-        next[field] = p[field] ? (p[field][lang] || p[field].en) : '';
-      } else {
-        next[field] = p[field] ? (p[field][lang] || p[field].en) : '';
-      }
-    });
-    setFormData(next);
-    setActiveModules({ ...EMPTY_MODULES, ...p.activeModules });
+  const loadPreset = (key) => {
+    if (hasContent && !window.confirm(t.confirmLoadPreset)) return;
+    const next = presetToState(presets[key], lang, tplMode === 'skeleton');
+    setValues({ ...EMPTY_VALUES, ...next.values });
+    setEnabled({ ...EMPTY_ENABLED, ...next.enabled });
+    setCustom([]);
     setShowTemplates(false);
   };
 
-  const handleNew = () => {
-    if (window.confirm(t.confirmNew)) {
-      setFormData(EMPTY_FORM);
-      setActiveModules(EMPTY_MODULES);
-    }
-  };
+  const coreFields = useMemo(() => CORE_BLOCKS.flatMap((b) => b.fields), []);
+  const filledCore = coreFields.filter((f) => values[f.id].trim()).length;
+  const openGroups = useMemo(() => GROUPS.filter((g) => enabled[g.id]), [enabled]);
+
+  const sections = useMemo(() => {
+    const out = openGroups.map((g) => ({
+      key: g.id,
+      title: loc(g.title, lang),
+      fields: g.fields.map((f) => ({ label: loc(f.label, lang), value: values[f.id] }))
+    }));
+    custom.forEach((c) => {
+      out.push({
+        key: c.id,
+        title: c.title.trim() || t.untitledSection,
+        fields: [{ label: '', value: c.body }]
+      });
+    });
+    return out;
+  }, [openGroups, custom, values, lang, t.untitledSection]);
+
+  const pillars = values.pillars
+    .split(/[.,;·\n]+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const slug =
+    (values.title || 'opengdd')
+      .toLowerCase()
+      .replace(/[^a-z0-9ğüşıöç\s-]/gi, '')
+      .trim()
+      .replace(/\s+/g, '-') || 'opengdd';
 
   const downloadBlob = (content, filename, mime) => {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(new Blob([content], { type: mime }));
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
@@ -126,31 +170,24 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const slug = (formData.title || 'opengdd').toLowerCase()
-    .replace(/[^a-z0-9ğüşıöç\s-]/gi, '')
-    .trim()
-    .replace(/\s+/g, '-') || 'opengdd';
-
-  const moduleTitleMap = {
-    lore: 'Lore & Universe',
-    coop: 'Co-op & Multiplayer',
-    risk: 'Risk & Reward',
-    ui: 'UI/UX & Controls',
-    assets: 'Asset Checklist',
-    monetization: 'Monetization & Business Model',
-    techSpecs: 'Technical Specs',
-    marketing: 'Marketing & Positioning',
-    milestones: 'Roadmap & Milestones'
-  };
-
   const exportMarkdown = () => {
-    let md = `# ${formData.title || t.untitledGame}\n\n`;
-    md += `_${formData.concept || ''}_\n\n`;
-    md += `**${t.genrePlatformLabel}** ${formData.genrePlatform || '-'}\n\n`;
-    md += `## Core Game Loop\n\n${formData.coreLoop || '-'}\n\n`;
-    MODULE_KEYS.forEach((key) => {
-      if (activeModules[key]) {
-        md += `## ${moduleTitleMap[key]}\n\n${formData[key] || '-'}\n\n`;
+    const empty = '—';
+    let md = `# ${values.title || t.untitledGame}\n\n`;
+    if (values.mantra.trim()) md += `> ${values.mantra.trim()}\n\n`;
+    if (values.pillars.trim()) md += `**${t.pillarsLabel}:** ${values.pillars.trim()}\n\n`;
+    coreFields
+      .filter((f) => !PREVIEW_SKIP.has(f.id))
+      .forEach((f) => {
+        md += `## ${loc(f.label, lang)}\n\n${values[f.id].trim() || empty}\n\n`;
+      });
+    sections.forEach((s) => {
+      md += `## ${s.title}\n\n`;
+      if (s.fields.length === 1) {
+        md += `${s.fields[0].value.trim() || empty}\n\n`;
+      } else {
+        s.fields.forEach((f) => {
+          md += `### ${f.label}\n\n${f.value.trim() || empty}\n\n`;
+        });
       }
     });
     downloadBlob(md, `${slug}.md`, 'text/markdown');
@@ -158,7 +195,7 @@ export default function App() {
   };
 
   const exportJson = () => {
-    const payload = { formData, activeModules, lang, exportedAt: new Date().toISOString() };
+    const payload = { version: 3, values, enabled, custom, lang, exportedAt: new Date().toISOString() };
     downloadBlob(JSON.stringify(payload, null, 2), `${slug}.json`, 'application/json');
     setShowExport(false);
   };
@@ -179,41 +216,64 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const parsed = JSON.parse(evt.target.result);
-        setFormData({ ...EMPTY_FORM, ...(parsed.formData || {}) });
-        setActiveModules({ ...EMPTY_MODULES, ...(parsed.activeModules || {}) });
-        if (parsed.lang) setLang(parsed.lang);
+        const p = JSON.parse(evt.target.result);
+        if (p.values) {
+          setValues({ ...EMPTY_VALUES, ...p.values });
+          setEnabled({ ...EMPTY_ENABLED, ...(p.enabled || {}) });
+          setCustom(Array.isArray(p.custom) ? p.custom : []);
+        } else {
+          const m = migrateLegacy(p.formData, p.activeModules);
+          setValues(m.values);
+          setEnabled(m.enabled);
+          setCustom([]);
+        }
+        if (p.lang) setLang(p.lang);
       } catch (err) {
-        alert('JSON parse error');
+        alert(t.importError);
       }
     };
     reader.readAsText(file);
     e.target.value = '';
   };
 
-  const categories = ['action', 'narrative', 'strategy', 'mobile'];
-  const categoryLabels = { action: t.catAction, narrative: t.catNarrative, strategy: t.catStrategy, mobile: t.catMobile };
+  const catLabels = { action: t.catAction, narrative: t.catNarrative, strategy: t.catStrategy, puzzle: t.catPuzzle, mobile: t.catMobile, jam: t.catJam };
+
+  const renderField = (f) => {
+    const common = {
+      id: f.id,
+      value: values[f.id],
+      onChange: (e) => setValue(f.id, e.target.value),
+      placeholder: f.ph ? loc(f.ph, lang) : '',
+      'aria-describedby': f.hint ? `${f.id}-hint` : undefined
+    };
+    return (
+      <div className="field" key={f.id}>
+        <label htmlFor={f.id}>{loc(f.label, lang)}</label>
+        {f.hint && <p className="hint" id={`${f.id}-hint`}>{loc(f.hint, lang)}</p>}
+        {f.line ? <input type="text" {...common} /> : <AutoText rows={f.rows || 2} {...common} />}
+      </div>
+    );
+  };
 
   return (
-    <div className="app-container">
-      <input type="file" accept="application/json" ref={fileInputRef} onChange={handleImportFile} style={{ display: 'none' }} />
+    <div className="app">
+      <input type="file" accept="application/json" ref={fileInputRef} onChange={handleImportFile} hidden />
 
-      <header className="header">
-        <div className="brand">
-          <span className="brand-mark">GDD</span>
-          <div>
-            <h1>{t.title}</h1>
-            <p>{t.subtitle}</p>
-          </div>
+      <header className="topbar">
+        <div className="wordmark">
+          <h1>Open<span>GDD</span></h1>
+          <p>{t.tagline}</p>
         </div>
-        <div className="header-actions">
-          <span className={`autosave-pill ${autosavedPulse ? 'pulse' : ''}`}>● {t.autosaved}</span>
-          <button className="ghost-btn" onClick={handleNew}>{t.newBtn}</button>
-          <button className="ghost-btn" onClick={() => setShowTemplates(true)}>🚀 {t.templatesBtn}</button>
-          <div className="export-wrap">
-            <button className="ghost-btn" onClick={() => setShowExport(!showExport)}>⇩ {t.exportBtn}</button>
+        <nav className="actions">
+          <span className={`saved ${savedPulse ? 'on' : ''}`} aria-live="polite">{t.saved}</span>
+          <button className="link-btn" onClick={handleNew}>{t.newBtn}</button>
+          <button className="link-btn" onClick={() => setShowTemplates(true)}>{t.templatesBtn}</button>
+          <div className="menu-wrap">
+            <button className="link-btn" aria-expanded={showExport} onClick={() => setShowExport(!showExport)}>
+              {t.exportBtn} ▾
+            </button>
             {showExport && (
-              <div className="export-menu">
+              <div className="menu">
                 <button onClick={exportMarkdown}>{t.exportMarkdown}</button>
                 <button onClick={exportJson}>{t.exportJson}</button>
                 <button onClick={exportPdf}>{t.exportPdf}</button>
@@ -222,35 +282,51 @@ export default function App() {
               </div>
             )}
           </div>
-          <button className="lang-btn" onClick={toggleLang}>🌐 {t.langToggle}</button>
-        </div>
+          <button className="solid-btn" onClick={() => setLang(lang === 'tr' ? 'en' : 'tr')}>{t.langToggle}</button>
+        </nav>
       </header>
 
       {showTemplates && (
-        <div className="modal-backdrop" onClick={() => setShowTemplates(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="backdrop" onClick={() => setShowTemplates(false)}>
+          <div className="dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-head">
               <div>
                 <h2>{t.templatePickerTitle}</h2>
                 <p>{t.templatePickerSubtitle}</p>
               </div>
-              <button className="modal-close" onClick={() => setShowTemplates(false)}>✕</button>
+              <button className="link-btn" onClick={() => setShowTemplates(false)}>{t.close}</button>
             </div>
-            <div className="modal-body">
-              {categories.map((cat) => (
-                <div key={cat} className="template-category">
-                  <h4>{categoryLabels[cat]}</h4>
-                  <div className="template-grid">
+            <div className="dialog-body">
+              <div className="tpl-mode" role="radiogroup" aria-label={t.tplModeLabel}>
+                {['example', 'skeleton'].map((mode) => (
+                  <label key={mode} className={tplMode === mode ? 'on' : ''}>
+                    <input type="radio" name="tplMode" checked={tplMode === mode} onChange={() => setTplMode(mode)} />
+                    <span>
+                      <strong>{mode === 'example' ? t.tplModeExample : t.tplModeSkeleton}</strong>
+                      <small>{mode === 'example' ? t.tplModeExampleHint : t.tplModeSkeletonHint}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {CATEGORIES.map((cat) => (
+                <div key={cat} className="tpl-category">
+                  <h3>{catLabels[cat]}</h3>
+                  <ul className="tpl-list">
                     {Object.entries(presets)
                       .filter(([, p]) => p.category === cat)
-                      .map(([key, p]) => (
-                        <button key={key} className="template-card" onClick={() => loadPreset(key)}>
-                          <span className="template-icon">{p.icon}</span>
-                          <span className="template-name">{p.title[lang] || p.title.en}</span>
-                          <span className="template-genre">{p.genrePlatform[lang] || p.genrePlatform.en}</span>
-                        </button>
-                      ))}
-                  </div>
+                      .map(([key, p]) => {
+                        const { name, note } = splitTitle(p.title[lang] || p.title.en);
+                        return (
+                          <li key={key}>
+                            <button className="tpl" onClick={() => loadPreset(key)}>
+                              <span className="tpl-name">{name}</span>
+                              <span className="tpl-note">{note}</span>
+                              <span className="tpl-mantra">{loc(p.mantra, lang)}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                  </ul>
                 </div>
               ))}
             </div>
@@ -258,119 +334,115 @@ export default function App() {
         </div>
       )}
 
-      <div className="workspace">
-        <div className="editor-pane">
-          <div className="card">
-            <h2>{t.coreInfo}</h2>
-            <div className="form-group">
-              <label>{t.workingTitle}</label>
-              <input type="text" name="title" value={formData.title} onChange={handleInputChange} placeholder={t.placeholderTitle} />
+      <main className="workspace">
+        <div className="editor">
+          <section className="part">
+            <div className="part-head">
+              <h2>{t.onePagerTitle}</h2>
+              <span className="count">{t.filledCount(filledCore, coreFields.length)}</span>
             </div>
-            <div className="form-group">
-              <label>{t.conceptStatement}</label>
-              <textarea name="concept" value={formData.concept} onChange={handleInputChange} placeholder={t.placeholderConcept} />
-            </div>
-            <div className="form-group">
-              <label>{t.genrePlatform}</label>
-              <input type="text" name="genrePlatform" value={formData.genrePlatform} onChange={handleInputChange} placeholder={t.placeholderGenrePlatform} />
-            </div>
-            <div className="form-group">
-              <label>{t.coreLoop}</label>
-              <textarea name="coreLoop" value={formData.coreLoop} onChange={handleInputChange} placeholder={t.placeholderCoreLoop} />
-            </div>
-          </div>
+            <p className="lead">{t.onePagerLead}</p>
+            {CORE_BLOCKS.map((block) => (
+              <fieldset className="block" key={block.id}>
+                <legend>{loc(block.title, lang)}</legend>
+                {block.fields.map(renderField)}
+              </fieldset>
+            ))}
+          </section>
 
-          <div className="card">
-            <h3>{t.modulesTitle}</h3>
-            <div className="checkbox-group">
-              {MODULE_KEYS.map((mod) => (
-                <label key={mod}>
-                  <input type="checkbox" checked={activeModules[mod]} onChange={() => toggleModule(mod)} />
-                  {t[`mod${mod.charAt(0).toUpperCase() + mod.slice(1)}`]}
-                </label>
+          <section className="part">
+            <div className="part-head">
+              <h2>{t.deepenTitle}</h2>
+              <span className="count">{t.sectionsOpen(openGroups.length)}</span>
+            </div>
+            <p className="lead">{t.deepenLead}</p>
+            <ul className="checklist">
+              {GROUPS.map((g) => (
+                <li key={g.id}>
+                  <label className={enabled[g.id] ? 'on' : ''}>
+                    <input type="checkbox" checked={enabled[g.id]} onChange={() => toggleGroup(g.id)} />
+                    <span>{loc(g.question, lang)}</span>
+                  </label>
+                </li>
               ))}
-            </div>
-          </div>
+            </ul>
+          </section>
 
-          {activeModules.lore && (
-            <div className="card">
-              <h3>{t.modLore}</h3>
-              <textarea name="lore" value={formData.lore} onChange={handleInputChange} placeholder={t.placeholderLore} />
+          {openGroups.map((g) => (
+            <section className="part open-group" key={g.id}>
+              <div className="part-head">
+                <h2>{loc(g.title, lang)}</h2>
+                <button className="link-btn quiet" onClick={() => toggleGroup(g.id)}>{t.removeSection}</button>
+              </div>
+              {g.fields.map(renderField)}
+            </section>
+          ))}
+
+          <section className="part">
+            <div className="part-head">
+              <h2>{t.customTitle}</h2>
             </div>
-          )}
-          {activeModules.coop && (
-            <div className="card">
-              <h3>{t.modCoop}</h3>
-              <textarea name="coop" value={formData.coop} onChange={handleInputChange} placeholder={t.placeholderCoop} />
-            </div>
-          )}
-          {activeModules.risk && (
-            <div className="card">
-              <h3>{t.modRisk}</h3>
-              <textarea name="risk" value={formData.risk} onChange={handleInputChange} placeholder={t.placeholderRisk} />
-            </div>
-          )}
-          {activeModules.ui && (
-            <div className="card">
-              <h3>{t.modUi}</h3>
-              <textarea name="ui" value={formData.ui} onChange={handleInputChange} placeholder={t.placeholderUi} />
-            </div>
-          )}
-          {activeModules.assets && (
-            <div className="card">
-              <h3>{t.modAssets}</h3>
-              <textarea name="assets" value={formData.assets} onChange={handleInputChange} placeholder={t.placeholderAssets} />
-            </div>
-          )}
-          {activeModules.monetization && (
-            <div className="card">
-              <h3>{t.modMonetization}</h3>
-              <textarea name="monetization" value={formData.monetization} onChange={handleInputChange} placeholder={t.placeholderMonetization} />
-            </div>
-          )}
-          {activeModules.techSpecs && (
-            <div className="card">
-              <h3>{t.modTechSpecs}</h3>
-              <textarea name="techSpecs" value={formData.techSpecs} onChange={handleInputChange} placeholder={t.placeholderTechSpecs} />
-            </div>
-          )}
-          {activeModules.marketing && (
-            <div className="card">
-              <h3>{t.modMarketing}</h3>
-              <textarea name="marketing" value={formData.marketing} onChange={handleInputChange} placeholder={t.placeholderMarketing} />
-            </div>
-          )}
-          {activeModules.milestones && (
-            <div className="card">
-              <h3>{t.modMilestones}</h3>
-              <textarea name="milestones" value={formData.milestones} onChange={handleInputChange} placeholder={t.placeholderMilestones} />
-            </div>
-          )}
+            <p className="lead">{t.customLead}</p>
+            {custom.map((c) => (
+              <div className="custom" key={c.id}>
+                <div className="custom-head">
+                  <input
+                    type="text"
+                    className="custom-name"
+                    aria-label={t.customNamePlaceholder}
+                    value={c.title}
+                    placeholder={t.customNamePlaceholder}
+                    onChange={(e) => updateCustom(c.id, { title: e.target.value })}
+                  />
+                  <button className="link-btn quiet" onClick={() => removeCustom(c.id)}>{t.removeSection}</button>
+                </div>
+                <AutoText
+                  rows={3}
+                  aria-label={t.customBodyPlaceholder}
+                  value={c.body}
+                  placeholder={t.customBodyPlaceholder}
+                  onChange={(e) => updateCustom(c.id, { body: e.target.value })}
+                />
+              </div>
+            ))}
+            <button className="outline-btn" onClick={addCustom}>+ {t.addCustom}</button>
+          </section>
         </div>
 
-        <div className="preview-pane">
-          <div className="preview-card" id="gdd-preview">
-            <h2 className="preview-heading">📄 {t.previewTitle}</h2>
-            <div className="preview-content">
-              <h1>{formData.title || t.untitledGame}</h1>
-              <p><em>{formData.concept || t.conceptPlaceholderPreview}</em></p>
+        <aside className="preview" aria-label={t.previewTitle}>
+          <div className="preview-label">{t.previewTitle}</div>
+          <article className="sheet" id="gdd-preview">
+            <h1>{values.title || t.untitledGame}</h1>
+            {values.mantra.trim() && <p className="mantra">{values.mantra}</p>}
+            {pillars.length > 0 && (
+              <ul className="pillars" aria-label={t.pillarsLabel}>
+                {pillars.map((p, i) => <li key={i}>{p}</li>)}
+              </ul>
+            )}
 
-              <hr />
-              <p><strong>{t.genrePlatformLabel}</strong> {formData.genrePlatform || "-"}</p>
-
-              <h3>Core Game Loop</h3>
-              <p>{formData.coreLoop || "-"}</p>
-
-              {MODULE_KEYS.map((key) => activeModules[key] && (
-                <React.Fragment key={key}>
-                  <h3>{moduleTitleMap[key]}</h3>
-                  <p>{formData[key] || "-"}</p>
-                </React.Fragment>
+            {coreFields
+              .filter((f) => !PREVIEW_SKIP.has(f.id))
+              .map((f) => (
+                <div className="entry" key={f.id}>
+                  <h3>{loc(f.label, lang)}</h3>
+                  {values[f.id].trim() ? <p>{values[f.id]}</p> : <p className="blank">{t.emptyValue}</p>}
+                </div>
               ))}
-            </div>
-          </div>
-        </div>
-      </div>
+
+            {sections.map((s) => (
+              <div className="doc-section" key={s.key}>
+                <h2>{s.title}</h2>
+                {s.fields.map((f, i) => (
+                  <div className="entry" key={i}>
+                    {f.label && s.fields.length > 1 && <h3>{f.label}</h3>}
+                    {f.value.trim() ? <p>{f.value}</p> : <p className="blank">{t.emptyValue}</p>}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </article>
+        </aside>
+      </main>
     </div>
   );
 }

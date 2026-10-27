@@ -1,10 +1,10 @@
-// Each preset carries a "category"; the template picker groups them accordingly:
-// action | narrative | strategy | mobile
+import { onePagers } from './onePagers.js';
+
+// category: action | narrative | strategy | puzzle | mobile | jam
 
 const emptyModule = { tr: "", en: "" };
 
 export const presets = {
-  // ---------------------------------------------------------------- ACTION
   lethalCoop: {
     category: "action",
     icon: "☠️",
@@ -109,7 +109,6 @@ export const presets = {
     monetization: emptyModule, techSpecs: emptyModule, marketing: emptyModule, milestones: emptyModule
   },
 
-  // ------------------------------------------------------------- NARRATIVE
   rpgAdventure: {
     category: "narrative",
     icon: "🗡️",
@@ -146,11 +145,7 @@ export const presets = {
       tr: "Unity (URP), hedef: Windows/Mac, minimum 8GB RAM ve entegre grafik kartı desteği, önerilen: ayrık GPU 4GB VRAM.",
       en: "Unity (URP), target: Windows/Mac, minimum 8GB RAM with integrated GPU support, recommended: discrete GPU with 4GB VRAM."
     },
-    marketing: emptyModule,
-    milestones: {
-      tr: "Ay 1-2: Prototip, diyalog sistemi ve hizip mantığı. Ay 3-5: İlk bölgenin tam içerik üretimi. Ay 6: Vertical slice demo ve oyuncu testi.",
-      en: "Month 1-2: Prototype, dialogue system, and faction logic. Month 3-5: Full content pass on the first region. Month 6: Vertical slice demo and player testing."
-    }
+    marketing: emptyModule
   },
 
   visualNovel: {
@@ -188,7 +183,6 @@ export const presets = {
     milestones: emptyModule
   },
 
-  // -------------------------------------------------------------- STRATEGY
   strategy4x: {
     category: "strategy",
     icon: "🏰",
@@ -221,15 +215,11 @@ export const presets = {
       tr: "Unity ya da özel C++ motoru, hedef: Windows, orta-yüksek CPU gereksinimi (çok sayıda eşzamanlı AI turu hesaplaması), minimum 16GB RAM önerilir.",
       en: "Unity or custom C++ engine, target: Windows, mid-to-high CPU requirement (heavy simultaneous AI turn computation), 16GB RAM recommended."
     },
-    marketing: emptyModule,
-    milestones: {
-      tr: "Ay 1-3: Harita üretimi, tur sistemi ve temel ekonomi. Ay 4-6: Diplomasi sistemi ve rakip AI. Ay 7-9: Dengeleme, geç oyun içeriği ve Early Access hazırlığı.",
-      en: "Month 1-3: Map generation, turn system, and core economy. Month 4-6: Diplomacy system and rival AI. Month 7-9: Balancing, late-game content, and Early Access prep."
-    }
+    marketing: emptyModule
   },
 
   puzzlePremium: {
-    category: "strategy",
+    category: "puzzle",
     icon: "🧩",
     title: { tr: "Sessiz Odalar (Atmosferik Kaçış Bulmacası)", en: "Silent Rooms (Atmospheric Escape Puzzle)" },
     concept: {
@@ -286,14 +276,9 @@ export const presets = {
       tr: "Premium tek seferlik satın alma; kozmetik kart arkası ve karakter skin'leri isteğe bağlı DLC olarak, oynanışı etkilemeyen bir 'kozmetik pazar' modeli.",
       en: "Premium one-time purchase; cosmetic card-back skins and character outfits as optional DLC, following a purely cosmetic marketplace model that never touches gameplay."
     },
-    techSpecs: emptyModule, marketing: emptyModule,
-    milestones: {
-      tr: "Ay 1: Kart ve savaş sistemi prototipi. Ay 2-3: İlk 3 boss, 40 kart ve kat haritası. Ay 4: Kapalı beta ve dengeleme. Ay 5: Early Access sürümü.",
-      en: "Month 1: Card and combat system prototype. Month 2-3: First 3 bosses, 40 cards, and floor map. Month 4: Closed beta and balancing. Month 5: Early Access release."
-    }
+    techSpecs: emptyModule, marketing: emptyModule
   },
 
-  // ---------------------------------------------------------------- MOBILE
   hyperCasualMobile: {
     category: "mobile",
     icon: "📱",
@@ -325,15 +310,11 @@ export const presets = {
     marketing: {
       tr: "TikTok/Reels'te 10-15 saniyelik oynanış klipleriyle organik yayılma; UA testleri için Facebook/TikTok Ads, ilk hafta CPI ve D1 retention hedefleri belirlenip iterasyon yapılıyor.",
       en: "Organic reach via 10-15 second gameplay clips on TikTok/Reels; Facebook/TikTok Ads for UA testing, with CPI and D1 retention targets set and iterated on in week one."
-    },
-    milestones: {
-      tr: "Hafta 1-2: Çekirdek prototip ve tek mekanik testi. Hafta 3: Playtest ve UA testi (500-1000 kurulum). Hafta 4: Soft launch (1-2 pazar). Hafta 6: Sonuçlara göre global launch ya da pivot kararı.",
-      en: "Week 1-2: Core prototype and single-mechanic test. Week 3: Playtest and UA test (500-1,000 installs). Week 4: Soft launch (1-2 markets). Week 6: Global launch or pivot decision based on results."
     }
   },
 
   cozySim: {
-    category: "mobile",
+    category: "puzzle",
     icon: "🌿",
     title: { tr: "Küçük Çiftlik Günlüğü (Rahatlatıcı Simülasyon)", en: "Little Farm Diary (Cozy Sim)" },
     concept: {
@@ -360,5 +341,70 @@ export const presets = {
       en: "Free to play with optional cosmetic packs (home decor, outfits) and a one-time 'supporter pack' that removes ads and unlocks all content — a model that never touches gameplay balance."
     },
     techSpecs: emptyModule, marketing: emptyModule, milestones: emptyModule
+  },
+
+  idleClicker: {
+    category: "mobile",
+    icon: "⛏️",
+    title: { tr: "Sessiz Maden (Idle / Artımlı Oyun)", en: "Quiet Mine (Idle / Incremental)" },
+    concept: {
+      tr: "Oyuncu kapalıyken de ilerleyen, katmanlı yükseltmeler ve prestij sistemiyle uzun vadeli ilerleme hissi veren bir mobil artımlı oyun.",
+      en: "A mobile incremental game that keeps progressing while the player is away, with layered upgrades and a prestige system that sustains long-term progress."
+    },
+    genrePlatform: { tr: "Idle / Incremental / Mobile, Web", en: "Idle / Incremental / Mobile, Web" },
+    coreLoop: {
+      tr: "Dokun ya da bekle → Kaynak topla → Yükselt → Otomasyonu aç → Prestij ile sıfırla ve çarpanla güçlen.",
+      en: "Tap or wait → Collect resources → Upgrade → Unlock automation → Prestige to reset and grow stronger with a multiplier."
+    },
+    activeModules: { lore: false, coop: false, risk: false, ui: false, assets: false, monetization: true, techSpecs: true, marketing: false, milestones: false },
+    monetization: {
+      tr: "Ödüllü reklamla 2x kazanç ve çevrimdışı ödülü katlama; tek seferlik 'reklamları kaldır'. Hız artırıcı IAP'ler dengeyi bozmayacak şekilde sınırlı tutulur.",
+      en: "Rewarded ads for 2x earnings and doubled offline rewards, plus a one-time 'remove ads'. Speed-boost IAPs stay limited so they never break the balance."
+    },
+    techSpecs: {
+      tr: "Unity ya da web (JS). Çevrimdışı ilerleme için yerel zaman hesabı, büyük sayıların biçimlendirilmesi (1.2e15) ve kayıt bütünlüğü ayrıca ele alınmalı.",
+      en: "Unity or web (JS). Offline progress needs local-time handling, large-number formatting (1.2e15) and save integrity, which should be planned separately."
+    }
+  },
+
+  gameJam: {
+    category: "jam",
+    icon: "⏱️",
+    title: { tr: "48 Saat (Game Jam Prototipi)", en: "48 Hours (Game Jam Prototype)" },
+    concept: {
+      tr: "Tek bir mekaniğe odaklanan, 48 saatte bitirilebilecek kadar küçük bir oyun. Kapsamı kısıtlamak, bitirmenin tek yolu.",
+      en: "A game small enough to finish in 48 hours, built around a single mechanic. Cutting scope is the only way to finish."
+    },
+    genrePlatform: { tr: "Prototip / Web, PC (itch.io)", en: "Prototype / Web, PC (itch.io)" },
+    coreLoop: {
+      tr: "Tek mekanik → Tek seviye → Tek başarı ya da başarısızlık durumu → Anında tekrar.",
+      en: "One mechanic → One level → One win or fail state → Instant retry."
+    },
+    activeModules: { lore: false, coop: false, risk: false, ui: false, assets: false, monetization: false, techSpecs: false, marketing: false, milestones: false }
   }
 };
+
+// one-pager fields are in onePagers.js
+Object.entries(onePagers).forEach(([key, extra]) => Object.assign(presets[key], extra));
+
+// preset key -> editor field, where the names differ
+const FIELD_MAP = { concept: 'summary', ui: 'interface', assets: 'art' };
+// preset module -> group it opens
+const MODULE_MAP = { lore: 'story', coop: 'multiplayer', risk: 'risk', monetization: 'business', techSpecs: 'tech', marketing: 'marketing' };
+const SKIP = new Set(['category', 'icon', 'activeModules', 'milestones']);
+
+// skeleton keeps only the genre line and opens the sections that fit
+export function presetToState(preset, lang, skeleton = false) {
+  const values = {};
+  Object.entries(preset).forEach(([key, val]) => {
+    if (SKIP.has(key)) return;
+    if (skeleton && key !== 'genrePlatform') return;
+    values[FIELD_MAP[key] || key] = val[lang] || val.en || '';
+  });
+  const enabled = {};
+  Object.entries(MODULE_MAP).forEach(([mod, group]) => {
+    const on = Boolean(preset.activeModules?.[mod]);
+    enabled[group] = skeleton ? on : on && Boolean(preset[mod]?.[lang] || preset[mod]?.en);
+  });
+  return { values, enabled };
+}
