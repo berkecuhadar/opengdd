@@ -2,6 +2,15 @@
 
 A game design document tool for indie developers. It starts as a one-pager; tick what your game has (story, characters, economy, multiplayer...) and the matching full-GDD sections open. Export to Markdown, JSON, or PDF whenever you're ready.
 
+> **Status: archived.** Development continues in [Ludograph](https://github.com/berkecuhadar/ludograph),
+> a game design editor whose Document view is built on OpenGDD. It uses the same field and section
+> ids and reads and writes the OpenGDD JSON format (version 3), so a file saved here opens there and
+> the other way round.
+>
+> This repository stays online and works as it is, but it gets no new features or fixes. If you want
+> the graph of mechanics next to the document, or the newest work, use Ludograph. The 10 templates and
+> the Turkish interface exist only here for now; Ludograph has 3 templates and an English interface.
+
 ---
 
 ## Features
@@ -23,6 +32,15 @@ npm run dev        # http://localhost:5173
 npm run build      # production build
 npm run preview    # preview the build
 ```
+
+## Moving to Ludograph
+
+1. In OpenGDD, export your document as JSON.
+2. In Ludograph, open the Document view and import that file.
+
+Your text, the sections you switched on and your own sections come across. Ludograph keeps the
+document next to a graph of the game's mechanics, and its Markdown export puts the document in front
+of the graph.
 
 ## Project Structure
 
